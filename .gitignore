@@ -1,0 +1,21 @@
+# ── secrets / config (NEVER commit) ──
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# ── python ──
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# ── runtime data (private — never publish) ──
+logs/
+state/
+transcripts/
+
+# ── os cruft ──
+.DS_Store
+Thumbs.db

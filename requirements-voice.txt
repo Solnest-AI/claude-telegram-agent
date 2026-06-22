@@ -1,0 +1,8 @@
+# OPTIONAL — local voice-note transcription (speech -> text), Apple Silicon Mac only.
+# This uses Apple's MLX framework and only installs on an M-series Mac.
+# Install:  python -m pip install -r requirements-voice.txt
+#
+# Not on an Apple Silicon Mac? Skip this file — text, images and files all still work,
+# and voice-OUT (ElevenLabs) works everywhere. The bot just can't transcribe inbound
+# voice notes without this.
+mlx-whisper>=0.4
