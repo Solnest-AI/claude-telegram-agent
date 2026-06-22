@@ -460,7 +460,8 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         if CLIENT:
             status = await CLIENT.get_mcp_status()
-            servers = getattr(status, "servers", None)
+            # SDK returns an McpStatusResponse TypedDict (a dict) keyed "mcpServers".
+            servers = status.get("mcpServers") if isinstance(status, dict) else getattr(status, "mcpServers", None)
             if servers is not None:
                 lines.append(f"MCP servers loaded: {len(servers)}")
     except Exception as e:
@@ -612,11 +613,11 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     caption = (msg.caption or "").strip()
     prompt = (
-        f"[Ryan sent an image. It is saved locally at: {img_path}\n"
+        f"[{USER_NAME} sent an image. It is saved locally at: {img_path}\n"
         f"View it with the Read tool, then respond to it.]"
     )
     if caption:
-        prompt += f"\nHis message with the image: {caption}"
+        prompt += f"\nTheir message with the image: {caption}"
 
     if QUERY_LOCK.locked():
         await msg.reply_text("⏳ Still working on the previous request — queued.")
@@ -642,7 +643,7 @@ async def on_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if size and size > 20 * 1024 * 1024:
         await msg.reply_text(
             f"⚠️ That file is {size // (1024*1024)}MB — over Telegram's 20MB bot limit. "
-            "Drop it in a folder on the Mac (or Google Drive → make offline) and tell me the path instead."
+            "Drop it in a folder on this machine (or a synced cloud drive) and tell me the path instead."
         )
         return
 
@@ -664,13 +665,13 @@ async def on_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     caption = (msg.caption or "").strip()
     prompt = (
-        f"[Ryan sent a file via Telegram.\n"
+        f"[{USER_NAME} sent a file via Telegram.\n"
         f"Saved locally at: {file_path}\n"
         f"Original name: {name} ({size} bytes)\n"
         f"Inspect/handle it as needed (unzip, read, etc.).]"
     )
     if caption:
-        prompt += f"\nHis message with the file: {caption}"
+        prompt += f"\nTheir message with the file: {caption}"
 
     try:
         await note.edit_text(f"\U0001f4ce Saved “{name}” — on it.")
