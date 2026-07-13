@@ -83,6 +83,10 @@ USER_NAME = os.environ.get("USER_NAME", "Me")
 CLAUDE_CWD = os.environ.get("CLAUDE_CWD", os.path.expanduser("~"))
 PERMISSION_MODE = os.environ.get("PERMISSION_MODE", "default").strip() or "default"
 APPROVAL_TIMEOUT = int(os.environ.get("APPROVAL_TIMEOUT", "300"))
+# Proactive health-check: how often (seconds) an idle bot pings its Claude
+# subprocess and silently reconnects if it died — so the first real message after
+# an idle-death doesn't have to wait out a reconnect. Set to 0 to disable.
+HEALTH_CHECK_SECONDS = int(os.environ.get("HEALTH_CHECK_SECONDS", "180"))
 # Model the agent runs on. Leave ANTHROPIC_MODEL empty to use whatever your Claude
 # subscription/CLI defaults to (most portable — works on any plan). Set it (e.g.
 # claude-opus-4-8) only if you want to pin a specific model you have access to.
@@ -396,6 +400,41 @@ async def reconnect(fresh: bool = False):
     except Exception as e:
         logger.error("reconnect with resume failed (%s); starting fresh", e)
         CLIENT = await build_client(None)
+
+
+async def _health_probe() -> str:
+    """One idle liveness check. If the long-lived Claude subprocess is unresponsive
+    (e.g. it died during a multi-day idle), heal it before the user notices.
+    Returns 'busy' | 'ok' | 'healed' | 'failed' (for logging / tests)."""
+    if QUERY_LOCK.locked():
+        return "busy"  # a real turn is in flight; it heals itself if the send fails
+    async with QUERY_LOCK:
+        try:
+            await CLIENT.get_mcp_status()  # cheap round-trip; raises if the process is dead
+            return "ok"
+        except Exception as e:
+            logger.warning("health check: client unresponsive (%s); reconnecting proactively", e)
+            try:
+                await reconnect(fresh=False)
+                logger.info("health check: reconnected OK")
+                return "healed"
+            except Exception as e2:
+                logger.error("health check: proactive reconnect failed: %s", e2)
+                return "failed"
+
+
+async def health_monitor():
+    """Background loop: keep the long-lived Claude subprocess healthy while idle so
+    the first message after an idle-death is answered instantly, not after a reconnect."""
+    while True:
+        try:
+            await asyncio.sleep(HEALTH_CHECK_SECONDS)
+        except asyncio.CancelledError:
+            return
+        try:
+            await _health_probe()
+        except Exception as e:
+            logger.error("health monitor iteration failed: %s", e)
 
 
 # --------------------------------------------------------------------------- #
@@ -768,7 +807,22 @@ async def handle_query(update: Update, text: str, speak: bool = False):
     parts: list[str] = []
     sid: str | None = None
     try:
-        await CLIENT.query(text)
+        try:
+            await CLIENT.query(text)
+        except Exception as _send_err:
+            # The single long-lived Claude subprocess can die during a long idle
+            # (observed: exit 143/SIGTERM after multi-day idle). The old path
+            # reconnected but dropped THIS message, so the first message after a
+            # death always errored. Heal the subprocess and retry the send once so
+            # the message is actually answered. If the retry also fails, the outer
+            # handler below reports it and reconnects again.
+            logger.warning("query send failed (%s); reconnecting and retrying once", _send_err)
+            try:
+                await status_msg.edit_text("♻️ Reconnecting…")
+            except Exception:
+                pass
+            await reconnect(fresh=False)
+            await CLIENT.query(text)
         async for msg in CLIENT.receive_response():
             if isinstance(msg, AssistantMessage):
                 for block in msg.content:
@@ -882,6 +936,10 @@ async def main():
         )
     except Exception as e:
         logger.warning("startup ping failed: %s", e)
+
+    if HEALTH_CHECK_SECONDS > 0:
+        asyncio.create_task(health_monitor())
+        logger.info("health monitor on (every %ss).", HEALTH_CHECK_SECONDS)
 
     await asyncio.Event().wait()  # run forever; launchd KeepAlive supervises
 
