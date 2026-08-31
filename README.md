@@ -48,10 +48,11 @@ Full step-by-step (Mac **and** Windows, ~20 min) is in **[SETUP.md](SETUP.md)**.
    ```bash
    git clone https://github.com/Solnest-AI/claude-telegram-agent.git
    cd claude-telegram-agent
-   python -m venv .venv
    # macOS/Linux:
+   python3 -m venv .venv
    .venv/bin/python -m pip install -r requirements.txt
    # Windows:
+   # python -m venv .venv
    # .\.venv\Scripts\python -m pip install -r requirements.txt
    ```
 3. **Configure:** copy `.env.example` → `.env`, paste in your `TELEGRAM_BOT_TOKEN` and `TELEGRAM_ALLOWED_USERS`.

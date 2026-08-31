@@ -87,6 +87,9 @@ APPROVAL_TIMEOUT = int(os.environ.get("APPROVAL_TIMEOUT", "300"))
 # subprocess and silently reconnects if it died — so the first real message after
 # an idle-death doesn't have to wait out a reconnect. Set to 0 to disable.
 HEALTH_CHECK_SECONDS = int(os.environ.get("HEALTH_CHECK_SECONDS", "180"))
+# Localhost port used only as a single-instance lock (two bots polling one token
+# is a Telegram 409). Change it if something else on your machine wants 49737.
+LOCK_PORT = int(os.environ.get("LOCK_PORT", "49737"))
 # Model the agent runs on. Leave ANTHROPIC_MODEL empty to use whatever your Claude
 # subscription/CLI defaults to (most portable — works on any plan). Set it (e.g.
 # claude-opus-4-8) only if you want to pin a specific model you have access to.
@@ -880,7 +883,7 @@ async def handle_query(update: Update, text: str, speak: bool = False):
 _LOCK_SOCK = None
 
 
-def acquire_single_instance_lock(port: int = 49737) -> bool:
+def acquire_single_instance_lock(port: int = LOCK_PORT) -> bool:
     """Prevent two bot instances from polling the same token (Telegram 409 guard)."""
     global _LOCK_SOCK
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -895,14 +898,20 @@ def acquire_single_instance_lock(port: int = 49737) -> bool:
 
 async def main():
     global APP, CLIENT
-    if not acquire_single_instance_lock():
-        logger.error("Another bot instance already holds the lock; exiting to avoid double-polling.")
-        sys.exit(0)
+    # Config first: a misconfigured .env should report the real problem, not a
+    # lock message from whatever else happens to hold the port.
     if not TOKEN:
         logger.error("TELEGRAM_BOT_TOKEN missing. Fill in .env.")
         sys.exit(1)
     if not ALLOWED_USERS:
         logger.error("TELEGRAM_ALLOWED_USERS missing.")
+        sys.exit(1)
+    if not acquire_single_instance_lock():
+        logger.error(
+            "Port %s is already taken, so another bot instance is probably running; "
+            "exiting to avoid double-polling. Stop the other one, or set LOCK_PORT in .env.",
+            LOCK_PORT,
+        )
         sys.exit(1)
 
     # concurrent_updates(True) is REQUIRED: on_message awaits the approval Future
