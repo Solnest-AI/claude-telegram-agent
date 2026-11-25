@@ -184,6 +184,29 @@ Logs are in `logs\` either way.
 
 ---
 
+## Step 7b - Turn on automatic updates (do not skip)
+
+Run this once, from the project folder. It is the same command on Mac and on Windows (in
+Claude Code, or in Git Bash):
+
+```bash
+PY=.venv/bin/python; [ -x "$PY" ] || PY=.venv/Scripts/python.exe; bash detach_from_github.sh && "$PY" solnest_autoupdate.py register --name telegram-agent --folder "$PWD" --update '{python} update.py' --after 'bash after-update.sh' --undo '{python} update.py --undo'
+```
+
+It prints `[autoupdate] telegram-agent will keep itself up to date`. From now on, once a day,
+in the background when Claude Code starts, it gets the latest published release, installs any
+new packages, checks the new code loads and restarts the always-on bot so it runs the new code
+(the bot picks the conversation back up after the restart). If a new release fails that check,
+it puts the old version back by itself. Your `.env`, `logs/`, `state/` and `transcripts/` are
+never touched. It lives in `~/.solnest/`, outside this folder.
+
+`detach_from_github.sh` turns a fresh `git clone` into a plain folder, because updates come
+from published releases, not from git. If it says "kept attached", you changed the bot's own
+code: updates will not install on that copy, so nothing of yours is overwritten. Put your
+changes in your own instructions file instead (see "Make it yours").
+
+---
+
 ## Step 8 — Use it
 
 Message your bot. Try:
@@ -239,6 +262,32 @@ tells you it can't transcribe inbound voice.)
 | Skip a broken/slow MCP server | `MCP_EXCLUDE=server-name` |
 | Let a teammate use it too | `TELEGRAM_ALLOWED_USERS=111,222` |
 | Pin a specific model | `ANTHROPIC_MODEL=claude-opus-4-8` (only if your plan has it) |
+
+**Change its personality or standing rules:** write them in plain words in
+`~/.solnest/telegram-agent/my-instructions.md` (or ask Claude Code, in this folder, to do it
+for you), then send `/new` to the bot. Do not edit `bot.py` for this: the bot updates itself
+and replaces its own files, so a change there is lost. This file is never touched by an update.
+
+---
+
+## Updating
+
+Updates install themselves (Step 7b), so you normally do nothing.
+
+- Is it updating itself? `.venv/bin/python ~/.solnest/autoupdate.py status` (Windows:
+  `.venv/Scripts/python.exe` instead of `.venv/bin/python`).
+- Stop all automatic updates: `... autoupdate.py pause` (`resume` turns them back on).
+- Update now, by hand: `.venv/bin/python update.py`, then `bash after-update.sh`, then run the
+  Step 7b command once more (it picks up a newer auto-updater if the release has one). The
+  updater only takes published releases, never untagged work, and copies every file it
+  replaces to `.update-backup/` first.
+- Go back one version: `.venv/bin/python update.py --undo`, then `bash after-update.sh`.
+- "still linked to git": run `bash detach_from_github.sh` first. If it keeps the link (you
+  changed the code), update with `git pull --ff-only` instead.
+- No `update.py` in the folder: your copy is from before automatic updates. If you cloned it,
+  run `git pull --ff-only`, then `bash after-update.sh`, then Step 7b. If you used the ZIP,
+  download the latest release ZIP, copy its files over this folder (keep `.env`, `logs/`,
+  `state/` and `transcripts/`), then `bash after-update.sh` and Step 7b.
 
 ---
 

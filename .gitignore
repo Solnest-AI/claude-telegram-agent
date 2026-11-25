@@ -16,6 +16,10 @@ logs/
 state/
 transcripts/
 
+# ── updater: backups of replaced files, the list of files this copy shipped ──
+.update-backup/
+.telegram-agent-files.txt
+
 # ── os cruft ──
 .DS_Store
 Thumbs.db
