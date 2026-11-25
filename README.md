@@ -65,6 +65,9 @@ Full step-by-step (Mac **and** Windows, ~20 min) is in **[SETUP.md](SETUP.md)**.
    - **macOS:** `bash install-agent.sh`
    - **Windows:** `powershell -ExecutionPolicy Bypass -File .\install-task.ps1`
 
+6. **Turn on automatic updates:** one command, in [SETUP.md](SETUP.md) Step 7b. After that it keeps
+   itself on the latest release and never touches your `.env`.
+
 That's it — it now starts at login and relaunches itself if it ever crashes.
 
 ---

@@ -122,6 +122,11 @@ MCP_EXCLUDE = {s.strip() for s in os.environ.get("MCP_EXCLUDE", "").split(",") i
 # "all" enables every discovered skill; "none" disables; or a comma list of names.
 SKILLS_CONFIG = os.environ.get("SKILLS", "all").strip()
 CLAUDE_JSON = Path(os.path.expanduser("~")) / ".claude.json"
+# The user's own standing instructions for the bot (personality, tone, rules).
+# They live outside this folder because the bot updates itself and replaces its
+# own files; nothing there survives an update, this file always does.
+MY_INSTRUCTIONS = (Path(os.environ.get("SOLNEST_HOME") or Path(os.path.expanduser("~")) / ".solnest")
+                   / "telegram-agent" / "my-instructions.md")
 
 STATE_DIR.mkdir(parents=True, exist_ok=True)
 LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -366,6 +371,16 @@ def skills_option():
     return [s.strip() for s in SKILLS_CONFIG.split(",") if s.strip()]
 
 
+def my_instructions() -> str | None:
+    """The user's own instructions, or None when there are none (then the
+    session starts exactly as it always did)."""
+    try:
+        text = MY_INSTRUCTIONS.read_text(encoding="utf-8").strip()
+    except (OSError, UnicodeDecodeError):
+        return None
+    return text or None
+
+
 async def build_client(resume: str | None) -> ClaudeSDKClient:
     opts = dict(
         cwd=CLAUDE_CWD,
@@ -379,6 +394,13 @@ async def build_client(resume: str | None) -> ClaudeSDKClient:
     )
     if MODEL:                              # pin a model only if ANTHROPIC_MODEL is set
         opts["model"] = MODEL
+    mine = my_instructions()
+    if mine:                               # the user's own instructions, re-read on every (re)connect and /new
+        opts["system_prompt"] = (
+            "Standing instructions from the person who owns this Telegram agent. Follow them. "
+            f"They live in {MY_INSTRUCTIONS}; to change them, edit that file, never bot.py.\n\n{mine}"
+        )
+        logger.info("using my-instructions.md (%d chars)", len(mine))
     options = ClaudeAgentOptions(**opts)
     client = ClaudeSDKClient(options=options)
     await client.connect()
